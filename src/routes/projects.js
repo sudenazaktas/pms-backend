@@ -130,5 +130,62 @@ router.post("/:id/apply", authMiddleware, requireRole("student"), (req, res) => 
   db.prepare("INSERT INTO project_applications (project_id, student_profile_id) VALUES (?, ?)").run(req.params.id, sp.student_profile_id);
   res.status(201).json({ success: true, message: "Başvurunuz alındı" });
 });
+// GET /projects/:id/applications — proje sahibi başvuruları görür
+router.get("/:id/applications", authMiddleware, requireRole("student"), (req, res) => {
+  const sp = db.prepare("SELECT student_profile_id FROM student_profiles WHERE user_id = ?").get(req.user.id);
+  if (!sp) return res.status(400).json({ error: "Öğrenci profili bulunamadı" });
 
+  const project = db.prepare("SELECT * FROM projects WHERE project_id = ?").get(req.params.id);
+  if (!project) return res.status(404).json({ error: "Proje bulunamadı" });
+
+  if (project.owner_student_profile_id !== sp.student_profile_id)
+    return res.status(403).json({ error: "Bu projenin sahibi değilsiniz" });
+
+  const applications = db.prepare(`
+    SELECT
+      pa.application_id as id,
+      pa.status,
+      pa.applied_at,
+      pa.reviewed_at,
+      u.full_name as student_name,
+      u.email as student_email,
+      sp2.department,
+      sp2.year_level,
+      sp2.github_link,
+      sp2.linkedin_link
+    FROM project_applications pa
+    JOIN student_profiles sp2 ON pa.student_profile_id = sp2.student_profile_id
+    JOIN users u ON sp2.user_id = u.user_id
+    WHERE pa.project_id = ?
+    ORDER BY pa.applied_at DESC
+  `).all(req.params.id);
+
+  res.json(applications);
+});
+
+// PATCH /projects/:id/applications/:appId — başvuruyu kabul/ret et
+router.patch("/:id/applications/:appId", authMiddleware, requireRole("student"), (req, res) => {
+  const { status } = req.body;
+
+  if (!["Accepted", "Rejected"].includes(status))
+    return res.status(400).json({ error: "Status 'Accepted' veya 'Rejected' olmalı" });
+
+  const sp = db.prepare("SELECT student_profile_id FROM student_profiles WHERE user_id = ?").get(req.user.id);
+  if (!sp) return res.status(400).json({ error: "Öğrenci profili bulunamadı" });
+
+  const project = db.prepare("SELECT * FROM projects WHERE project_id = ?").get(req.params.id);
+  if (!project) return res.status(404).json({ error: "Proje bulunamadı" });
+
+  if (project.owner_student_profile_id !== sp.student_profile_id)
+    return res.status(403).json({ error: "Bu projenin sahibi değilsiniz" });
+
+  const app = db.prepare("SELECT * FROM project_applications WHERE application_id = ?").get(req.params.appId);
+  if (!app) return res.status(404).json({ error: "Başvuru bulunamadı" });
+
+  db.prepare(`
+    UPDATE project_applications SET status = ?, reviewed_at = datetime('now') WHERE application_id = ?
+  `).run(status, req.params.appId);
+
+  res.json({ success: true, status });
+});
 module.exports = router;
