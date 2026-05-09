@@ -279,4 +279,60 @@ router.delete("/:id", authMiddleware, requireRole("student"), async (req, res) =
   }
 });
 
+// PATCH /projects/:id/admin — admin herhangi bir projeyi düzenle
+router.patch("/:id/admin", authMiddleware, requireRole("admin"), async (req, res) => {
+  try {
+    const { title, description, type, teamMembers, skills, budget } = req.body;
+
+    const project = await get("SELECT * FROM projects WHERE project_id = ?", [req.params.id]);
+    if (!project) return res.status(404).json({ error: "Proje bulunamadı" });
+
+    if (type) {
+      const cat = await get("SELECT category_id FROM project_categories WHERE category_name = ?", [type]);
+      if (!cat) return res.status(400).json({ error: "Geçersiz proje tipi" });
+      await run("UPDATE projects SET category_id = ? WHERE project_id = ?", [cat.category_id, req.params.id]);
+    }
+
+    await run(`
+      UPDATE projects
+      SET title       = COALESCE(?, title),
+          description = COALESCE(?, description),
+          team_size   = COALESCE(?, team_size),
+          budget      = COALESCE(?, budget)
+      WHERE project_id = ?
+    `, [title, description, teamMembers, budget, req.params.id]);
+
+    if (skills && Array.isArray(skills)) {
+      await run("DELETE FROM project_required_skills WHERE project_id = ?", [req.params.id]);
+      for (const skillName of skills) {
+        await run("INSERT OR IGNORE INTO skills (skill_name) VALUES (?)", [skillName]);
+        const skill = await get("SELECT skill_id FROM skills WHERE skill_name = ?", [skillName]);
+        await run("INSERT OR IGNORE INTO project_required_skills (project_id, skill_id) VALUES (?, ?)", [req.params.id, skill.skill_id]);
+      }
+    }
+
+    res.json({ success: true, message: "Proje güncellendi" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /projects/:id/admin — admin herhangi bir projeyi sil
+router.delete("/:id/admin", authMiddleware, requireRole("admin"), async (req, res) => {
+  try {
+    const project = await get("SELECT * FROM projects WHERE project_id = ?", [req.params.id]);
+    if (!project) return res.status(404).json({ error: "Proje bulunamadı" });
+
+    await run("DELETE FROM project_required_skills WHERE project_id = ?", [req.params.id]);
+    await run("DELETE FROM project_applications WHERE project_id = ?", [req.params.id]);
+    await run("DELETE FROM advisor_requests WHERE project_id = ?", [req.params.id]);
+    await run("DELETE FROM project_roles WHERE project_id = ?", [req.params.id]);
+    await run("DELETE FROM projects WHERE project_id = ?", [req.params.id]);
+
+    res.json({ success: true, message: "Proje silindi" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

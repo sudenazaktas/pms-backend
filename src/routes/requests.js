@@ -16,8 +16,12 @@ router.get("/", authMiddleware, requireRole("advisor"), async (req, res) => {
         ar.status,
         ar.message,
         ar.created_at,
-        u.full_name   as student,
-        p.title       as project,
+        u.full_name      as student,
+        u.user_id        as student_user_id,
+        sp.department    as department,
+        sp.year_level    as year,
+        sp.github_link   as github,
+        p.title          as project,
         pc.category_name as type
       FROM advisor_requests ar
       JOIN student_profiles sp ON ar.student_profile_id = sp.student_profile_id
@@ -28,7 +32,35 @@ router.get("/", authMiddleware, requireRole("advisor"), async (req, res) => {
       ORDER BY ar.created_at DESC
     `, [ip.instructor_profile_id]);
 
-    res.json(requests);
+    const enriched = await Promise.all(
+      requests.map(async (request) => {
+        const skills = await all(
+          `SELECT s.skill_name
+           FROM student_skills ss
+           JOIN skills s ON ss.skill_id = s.skill_id
+           WHERE ss.student_profile_id = (
+             SELECT student_profile_id FROM student_profiles WHERE user_id = ?
+           )`,
+          [request.student_user_id]
+        );
+        const interests = await all(
+          `SELECT i.interest_name
+           FROM student_interests si
+           JOIN interests i ON si.interest_id = i.interest_id
+           WHERE si.student_profile_id = (
+             SELECT student_profile_id FROM student_profiles WHERE user_id = ?
+           )`,
+          [request.student_user_id]
+        );
+        return {
+          ...request,
+          skills: skills.map((s) => s.skill_name),
+          interests: interests.map((i) => i.interest_name),
+        };
+      })
+    );
+
+    res.json(enriched);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
