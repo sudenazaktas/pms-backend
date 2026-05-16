@@ -8,6 +8,7 @@ const advisorRoutes      = require("./routes/advisors");
 const requestRoutes      = require("./routes/requests");
 const announcementRoutes = require("./routes/announcements");
 const userRoutes         = require("./routes/users");
+const categoryRoutes = require("./routes/categories"); 
 
 const app = express();
 const PORT = 3000;
@@ -21,6 +22,7 @@ app.use("/advisors",      advisorRoutes);
 app.use("/requests",      requestRoutes);
 app.use("/announcements", announcementRoutes);
 app.use("/users",         userRoutes);
+app.use("/categories", categoryRoutes);
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
