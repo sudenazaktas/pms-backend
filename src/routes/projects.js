@@ -13,6 +13,7 @@ async function formatProject(p) {
 
   return {
     id: p.project_id,
+    ownerId: p.owner_user_id,
     title: p.title,
     description: p.description,
     type: p.category_name,
@@ -35,6 +36,7 @@ router.get("/", authMiddleware, async (req, res) => {
       SELECT p.*,
         pc.category_name,
         u_owner.full_name as owner_name,
+        sp.user_id as owner_user_id,
         u_adv.full_name   as advisor_name
       FROM projects p
       LEFT JOIN project_categories pc ON p.category_id = pc.category_id
@@ -68,6 +70,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
       SELECT p.*,
         pc.category_name,
         u_owner.full_name as owner_name,
+        sp.user_id as owner_user_id,
         u_adv.full_name   as advisor_name
       FROM projects p
       LEFT JOIN project_categories pc ON p.category_id = pc.category_id
