@@ -334,5 +334,41 @@ router.delete("/:id/admin", authMiddleware, requireRole("admin"), async (req, re
     res.status(500).json({ error: err.message });
   }
 });
+// GET /projects/my-applications — öğrencinin kendi başvuruları
+router.get("/my-applications", authMiddleware, requireRole("student"), async (req, res) => {
+  try {
+    const sp = await get("SELECT student_profile_id FROM student_profiles WHERE user_id = ?", [req.user.id]);
+    if (!sp) return res.status(400).json({ error: "Öğrenci profili bulunamadı" });
 
+    const applications = await all(`
+      SELECT
+        pa.application_id as id,
+        pa.status,
+        pa.note,
+        pa.applied_at,
+        pa.reviewed_at,
+        p.project_id,
+        p.title as project_title,
+        p.description,
+        p.status as project_status,
+        p.team_size,
+        pc.category_name as type,
+        u_owner.full_name as owner_name,
+        u_adv.full_name as advisor_name
+      FROM project_applications pa
+      JOIN projects p ON pa.project_id = p.project_id
+      LEFT JOIN project_categories pc ON p.category_id = pc.category_id
+      LEFT JOIN student_profiles sp2 ON p.owner_student_profile_id = sp2.student_profile_id
+      LEFT JOIN users u_owner ON sp2.user_id = u_owner.user_id
+      LEFT JOIN instructor_profiles ip ON p.assigned_instructor_profile_id = ip.instructor_profile_id
+      LEFT JOIN users u_adv ON ip.user_id = u_adv.user_id
+      WHERE pa.student_profile_id = ?
+      ORDER BY pa.applied_at DESC
+    `, [sp.student_profile_id]);
+
+    res.json(applications);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 module.exports = router;
